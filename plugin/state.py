@@ -318,7 +318,7 @@ class SublimeYcmdState(object):
             # NOTE : This call blocks!!
             # TODO : Allow configurable completion timeout.
             completion_response = server.get_code_completions(
-                request_params, timeout=0.2,
+                request_params, timeout=0.6,
             )
             completions = completion_response.completions
             diagnostics = completion_response.diagnostics

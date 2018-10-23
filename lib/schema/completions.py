@@ -136,7 +136,7 @@ class CompletionOption(object):
         self._extra_data = extra_data
         self._detailed_info = detailed_info
         self._file_types = file_types
-        self._menu_text= menu_text
+        self._menu_text = menu_text
         self._kind = kind
 
     def shortdesc(self):
@@ -553,13 +553,10 @@ def _shortdesc_common(menu_info, kind):
     # else, unknown, let another `shortdesc` try to handle it
     return None
 
-def _shortdesc_cpp(menu_info, kind):
-    ''' Python-specific `shortdesc` function. '''
-    assert isinstance(menu_info, str), \
-        '[internal] menu info is not a str: %r' % (menu_info)
 
+def _shortdesc_cpp(menu_info, kind):
     if not kind:
-        return '[ID]]'
+        return '[ID]'
 
     return kind.lower()
 
