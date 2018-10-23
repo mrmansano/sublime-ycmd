@@ -130,12 +130,14 @@ class CompletionOption(object):
     '''
 
     def __init__(self, menu_info=None, insertion_text=None,
-                 extra_data=None, detailed_info=None, file_types=None):
+                 extra_data=None, detailed_info=None, file_types=None, menu_text=None, kind=None):
         self._menu_info = menu_info
         self._insertion_text = insertion_text
         self._extra_data = extra_data
         self._detailed_info = detailed_info
         self._file_types = file_types
+        self._menu_text= menu_text
+        self._kind = kind
 
     def shortdesc(self):
         '''
@@ -145,7 +147,7 @@ class CompletionOption(object):
         '''
 
         menu_info = self._menu_info
-        shortdesc = _shortdesc_common(menu_info)
+        shortdesc = _shortdesc_common(menu_info, self._kind)
 
         if shortdesc is not None:
             return shortdesc
@@ -156,13 +158,14 @@ class CompletionOption(object):
         #        this is technically non-deterministic. That shouldn't really
         #        matter since source files will only match one language.
         shortdesc_handlers = {
+            'cpp': _shortdesc_cpp,
             'python': _shortdesc_python,
             'javascript': _shortdesc_javascript,
         }
 
         for file_type, shortdesc_handler in shortdesc_handlers.items():
             if self._has_file_type(file_type):
-                shortdesc = shortdesc_handler(menu_info)
+                shortdesc = shortdesc_handler(menu_info, self._kind)
                 if shortdesc is not None:
                     return shortdesc
 
@@ -173,17 +176,34 @@ class CompletionOption(object):
         #     self.text(), menu_info,
         # )
 
-        return '?'
+        return menu_info
 
     def text(self):
         '''
         Returns the insertion text for this completion option. This is the text
         that should be written into the buffer when the user selects it.
         '''
+        param_list = []
+        count = 1
+        is_func = False
+        if self._menu_text:
+            is_func = re.match(r".*\(.*\)", self._menu_text) is not None
+            match = re.match(r".*\((.+)\)", self._menu_text)
+            if match:
+                groups = match.groups()
+                if len(groups) > 0:
+                    params = groups[0].split(',')
+                    for param in params:
+                        param_text = '${' + str(count) + ':' + param.strip() + '}'
+                        param_list.append(param_text)
+                        count += 1
         if not self._insertion_text:
             logger.error('completion option is not initialized')
             return ''
-        return self._insertion_text
+        if is_func:
+            return self._insertion_text + '(' + ', '.join(param_list) + ')'
+        else:
+            return self._insertion_text
 
     def __bool__(self):
         return bool(self._insertion_text)
@@ -341,11 +361,14 @@ def _parse_completion_option(node, file_types=None):
     insertion_text = node.get('insertion_text', None)
     extra_data = node.get('extra_data', None)
     detailed_info = node.get('detailed_info', None)
+    menu_text = node.get('menu_text', None)
+    kind = node.get('kind', None)
 
     return CompletionOption(
         menu_info=menu_info, insertion_text=insertion_text,
         extra_data=extra_data, detailed_info=detailed_info,
-        file_types=file_types,
+        file_types=file_types, menu_text=menu_text,
+        kind=kind
     )
 
 
@@ -498,13 +521,14 @@ SHORTDESC_FUNCTION = 'fn'
 SHORTDESC_DEFINITION = 'defn'
 SHORTDESC_ATTRIBUTE = 'attr'
 SHORTDESC_MODULE = 'mod'
+SHORTDESC_MACRO = 'macro'
 
 SHORTDESC_TYPE_CLASS = 'class'
 SHORTDESC_TYPE_STRING = 'str'
 SHORTDESC_TYPE_NUMBER = 'num'
 
 
-def _shortdesc_common(menu_info):
+def _shortdesc_common(menu_info, kind):
     '''
     Common/generic `shortdesc` function. This handles file-type agnostic menu
     info items, like identifiers.
@@ -512,19 +536,35 @@ def _shortdesc_common(menu_info):
     assert menu_info is None or isinstance(menu_info, str), \
         '[internal] menu info is not a str: %r' % (menu_info)
 
-    if not menu_info:
+    if not menu_info and not kind:
         # weird, ycmd doesn't know...
         # return an explicit '?' to prevent other `shortdesc` calls
         return SHORTDESC_UNKNOWN
 
-    if menu_info == '[ID]':
+    if menu_info and menu_info == '[ID]':
         return SHORTDESC_IDENTIFIER
+
+    if kind:
+        if str(kind).lower() == 'class':
+            return SHORTDESC_TYPE_CLASS
+        if str(kind).lower() == 'macro':
+            return SHORTDESC_MACRO
 
     # else, unknown, let another `shortdesc` try to handle it
     return None
 
+def _shortdesc_cpp(menu_info, kind):
+    ''' Python-specific `shortdesc` function. '''
+    assert isinstance(menu_info, str), \
+        '[internal] menu info is not a str: %r' % (menu_info)
 
-def _shortdesc_python(menu_info):
+    if not kind:
+        return '[ID]]'
+
+    return kind.lower()
+
+
+def _shortdesc_python(menu_info, kind):
     ''' Python-specific `shortdesc` function. '''
     assert isinstance(menu_info, str), \
         '[internal] menu info is not a str: %r' % (menu_info)
@@ -547,7 +587,7 @@ def _shortdesc_python(menu_info):
     return None
 
 
-def _shortdesc_javascript(menu_info):
+def _shortdesc_javascript(menu_info, kind):
     ''' JavaScript-specific `shortdesc` function. '''
     assert isinstance(menu_info, str), \
         '[internal] menu info is not a str: %r' % (menu_info)
